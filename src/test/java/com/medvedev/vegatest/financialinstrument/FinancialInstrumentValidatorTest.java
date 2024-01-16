@@ -65,7 +65,7 @@ public class FinancialInstrumentValidatorTest {
                                                         )))
                                         )
                         ),
-                        "Child instruments in composite can not be composites themselves"
+                        "Child instruments in composite financialInstrumentId=1 can not be composites themselves"
                 )
         );
     }

@@ -5,6 +5,7 @@ financial-instruments:
     "B1": "Bond1"
     "B2": "Bond2"
     "C1": "Combo1"
+    "C2": "Combo2"
   simple-instruments:
     - id: "S1"
     - id: "S2"
