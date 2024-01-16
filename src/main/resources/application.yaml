@@ -1,0 +1,22 @@
+financial-instruments:
+  mapping:
+    "S1": "Stock1"
+    "S2": "Stock2"
+    "B1": "Bond1"
+    "B2": "Bond2"
+    "C1": "Combo1"
+  simple-instruments:
+    - id: "S1"
+    - id: "S2"
+    - id: "B1"
+    - id: "B2"
+  composite-instruments:
+    - id: "C1"
+      child-instruments:
+        - id: "S1"
+        - id: "S2"
+        - id: "B1"
+    - id: "C2"
+      child-instruments:
+        - id: "B2"
+        - id: "S1"
