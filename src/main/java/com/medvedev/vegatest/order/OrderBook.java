@@ -70,17 +70,18 @@ public class OrderBook {
         removeOrder(orderId);
     }
 
+    // can be also configured as scheduled job
     public void processOrderBook(String instrumentId) {
         while (canProcess(instrumentId)) {
             final var buyQueue = buyOrders.get(instrumentId);
             final var sellQueue = sellOrders.get(instrumentId);
             final var buyOrder = buyQueue.first();
-            if (isComposite(buyOrder)) {
+            if (isComposite(buyOrder.getFinancialInstrumentId())) {
                 processCompositeOrder(buyOrder);
                 return;
             }
             final var sellOrder = sellQueue.first();
-            if (isComposite(sellOrder)) {
+            if (isComposite(sellOrder.getFinancialInstrumentId())) {
                 processCompositeOrder(sellOrder);
                 return;
             }
@@ -88,7 +89,7 @@ public class OrderBook {
             if (buyOrder.getPrice() == null || buyOrder.getPrice().compareTo(sellOrder.getPrice()) >= 0) {
                 executeTrade(buyOrder, sellOrder, buyOrder.getQuantity().min(sellOrder.getQuantity()));
             } else {
-                break;
+                return;
             }
         }
     }
@@ -103,7 +104,6 @@ public class OrderBook {
     }
 
     private void processCompositeOrder(Order compositeOrder) {
-        // Get the composite financial instrument
         final var oppositeOrderBook = orderBookPerType.get(compositeOrder.getType().getOpposite());
         final var financialInstrument = (CompositeFinancialInstrument) financialInstrumentsService.get(compositeOrder.getFinancialInstrumentId());
 
@@ -127,14 +127,14 @@ public class OrderBook {
             if (compositeOrderConditionMatches(compositeOrder, singleOppositeOrders)) {
                 executeCompositeTrade(compositeOrder, singleOppositeOrders, minQuantity);
             } else {
-                break;
+                return;
             }
         }
     }
 
     private boolean compositeOrderConditionMatches(Order compositeOrder, List<Order> singleOppositeOrders) {
         if (compositeOrder.getPrice() == null) {
-            return true;
+            return true; // assume that user wants to buy for any price
         }
         if (compositeOrder.getQuantity().compareTo(BigDecimal.ZERO) == 0) {
             return false;
@@ -152,7 +152,7 @@ public class OrderBook {
     }
 
     private void executeTrade(Order buyOrder, Order sellOrder, BigDecimal quantity) {
-        buyOrder.subtractQuantity(quantity);
+        buyOrder.subtractQuantity(quantity); // for simplicity I just subtract quantities
         sellOrder.subtractQuantity(quantity);
 
         cleanup(buyOrder);
@@ -170,20 +170,6 @@ public class OrderBook {
 
         log.info("Executed composite trade: compositeOrder={}, singleOrders={}", compositeOrder, singleOrders);
     }
-
-
-    // Helper method for testing: Adds an order directly without processing
-    public void addOrderWithoutProcessing(Order order) {
-        allOrders.put(order.getId(), order);
-        orderBookPerType.get(order.getType())
-                .computeIfAbsent(order.getFinancialInstrumentId(), k -> new ConcurrentSkipListSet<>(orderComparatorPerType.get(order.getType())))
-                .add(order);
-    }
-
-    private boolean isComposite(Order order) {
-        return financialInstrumentsService.get(order.getFinancialInstrumentId()) instanceof CompositeFinancialInstrument;
-    }
-
     private boolean isComposite(String financialInstrumentId) {
         return financialInstrumentsService.get(financialInstrumentId) instanceof CompositeFinancialInstrument;
     }
@@ -207,9 +193,12 @@ public class OrderBook {
 
     }
 
-    private Order getOrder(String orderId) {
-        return allOrders.get(orderId);
-
+    // Helper method for testing: Adds an order directly without processing
+    public void addOrderWithoutProcessing(Order order) {
+        allOrders.put(order.getId(), order);
+        orderBookPerType.get(order.getType())
+                .computeIfAbsent(order.getFinancialInstrumentId(), k -> new ConcurrentSkipListSet<>(orderComparatorPerType.get(order.getType())))
+                .add(order);
     }
 
     // Helper method for testing: Checks if an order exists in the book
