@@ -22,11 +22,7 @@ public class OrderBook {
     private final Map<String, ConcurrentSkipListSet<Order>> sellOrders;
     private final Map<String, Order> allOrders;
     private final Map<Order.Type, Map<String, ConcurrentSkipListSet<Order>>> orderBookPerType;
-    private static final Map<Order.Type, Comparator<Order>> orderComparatorPerType = Map.of(
-            Order.Type.BUY, Comparator.comparing(Order::getPrice, Comparator.nullsLast(BigDecimal::compareTo)).reversed(),
-            Order.Type.SELL, Comparator.comparing(Order::getPrice, Comparator.nullsFirst(BigDecimal::compareTo))
-    );
-
+    private final Map<Order.Type, Comparator<Order>> orderBookSortingPerType;
     private final OrderValidator validator;
     private final FinancialInstrumentsService financialInstrumentsService;
 
@@ -41,6 +37,11 @@ public class OrderBook {
         this.orderBookPerType = Map.of(
                 Order.Type.BUY, buyOrders,
                 Order.Type.SELL, sellOrders
+        );
+
+        this.orderBookSortingPerType = Map.of(
+                Order.Type.BUY, Comparator.comparing(Order::getPrice, Comparator.nullsLast(BigDecimal::compareTo)).reversed(),
+                Order.Type.SELL, Comparator.comparing(Order::getPrice, Comparator.nullsFirst(BigDecimal::compareTo))
         );
     }
 
@@ -60,7 +61,7 @@ public class OrderBook {
         orderBookPerType.get(order.getType())
                 .computeIfAbsent(
                         instrumentId,
-                        k -> new ConcurrentSkipListSet<>(orderComparatorPerType.get(order.getType())))
+                        k -> new ConcurrentSkipListSet<>(orderBookSortingPerType.get(order.getType())))
                 .add(order);
         log.info("Created new order: {}", order);
         processOrderBook(instrumentId);
@@ -197,7 +198,7 @@ public class OrderBook {
     public void addOrderWithoutProcessing(Order order) {
         allOrders.put(order.getId(), order);
         orderBookPerType.get(order.getType())
-                .computeIfAbsent(order.getFinancialInstrumentId(), k -> new ConcurrentSkipListSet<>(orderComparatorPerType.get(order.getType())))
+                .computeIfAbsent(order.getFinancialInstrumentId(), k -> new ConcurrentSkipListSet<>(orderBookSortingPerType.get(order.getType())))
                 .add(order);
     }
 
