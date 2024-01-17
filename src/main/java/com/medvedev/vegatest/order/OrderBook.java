@@ -6,9 +6,11 @@ import com.medvedev.vegatest.financialinstrument.FinancialInstrument;
 import com.medvedev.vegatest.financialinstrument.FinancialInstrumentsService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.ObjectUtils;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -64,6 +66,7 @@ public class OrderBook {
                         k -> new ConcurrentSkipListSet<>(orderBookSortingPerType.get(order.getType())))
                 .add(order);
         log.info("Created new order: {}", order);
+        updateFinancialInstrument(instrumentId);
         processOrderBook(instrumentId);
     }
 
@@ -148,8 +151,8 @@ public class OrderBook {
 
         final var priceComparisonResult = compositeOrder.getPrice().compareTo(singleOppositeOrdersCommonPrice);
         return compositeOrder.getType() == Order.Type.BUY
-                        ? priceComparisonResult >= 0
-                        : priceComparisonResult <= 0;
+                ? priceComparisonResult >= 0
+                : priceComparisonResult <= 0;
     }
 
     private void executeTrade(Order buyOrder, Order sellOrder, BigDecimal quantity) {
@@ -158,6 +161,8 @@ public class OrderBook {
 
         cleanup(buyOrder);
         cleanup(sellOrder);
+
+        updateFinancialInstrument(buyOrder.getFinancialInstrumentId());
 
         log.info("Executed trade: buyOrder={}, sellOrder={}", buyOrder, sellOrder);
     }
@@ -169,8 +174,12 @@ public class OrderBook {
         cleanup(compositeOrder);
         singleOrders.forEach(this::cleanup);
 
+        updateFinancialInstrument(compositeOrder.getFinancialInstrumentId());
+        singleOrders.forEach(order -> updateFinancialInstrument(order.getFinancialInstrumentId()));
+
         log.info("Executed composite trade: compositeOrder={}, singleOrders={}", compositeOrder, singleOrders);
     }
+
     private boolean isComposite(String financialInstrumentId) {
         return financialInstrumentsService.get(financialInstrumentId) instanceof CompositeFinancialInstrument;
     }
@@ -179,6 +188,30 @@ public class OrderBook {
         if (order.getQuantity().compareTo(BigDecimal.ZERO) == 0) {
             removeOrder(order.getId());
         }
+    }
+
+    private void updateFinancialInstrument(String financialInstrumentId) {
+        final var instrumentBuyOrders = buyOrders.get(financialInstrumentId);
+        final var instrumentSellOrders = sellOrders.get(financialInstrumentId);
+        var buyPrice = determinePrice(instrumentBuyOrders, instrumentSellOrders);
+        var sellPrice = determinePrice(instrumentSellOrders, instrumentBuyOrders);
+
+        var newPrice = buyPrice.add(sellPrice).divide(BigDecimal.valueOf(2), RoundingMode.HALF_EVEN);
+        financialInstrumentsService.updatePrice(financialInstrumentId, newPrice);
+    }
+
+    private BigDecimal determinePrice(ConcurrentSkipListSet<Order> instrumentOrders, ConcurrentSkipListSet<Order> instrumentOppositeOrders) {
+        if (!CollectionUtils.isEmpty(instrumentOrders)) {
+            if (CollectionUtils.isEmpty(instrumentOppositeOrders)) {
+                return ObjectUtils.firstNonNull(instrumentOrders.first().getPrice(), BigDecimal.ZERO);
+            }
+            return ObjectUtils.firstNonNull(instrumentOrders.first().getPrice(), instrumentOppositeOrders.first().getPrice(), BigDecimal.ZERO);
+        }
+        if (CollectionUtils.isEmpty(instrumentOppositeOrders)) {
+            return BigDecimal.ZERO;
+        }
+        return ObjectUtils.firstNonNull(instrumentOppositeOrders.first().getPrice(), BigDecimal.ZERO);
+
     }
 
     private void removeOrder(String orderId) {
@@ -200,6 +233,7 @@ public class OrderBook {
         orderBookPerType.get(order.getType())
                 .computeIfAbsent(order.getFinancialInstrumentId(), k -> new ConcurrentSkipListSet<>(orderBookSortingPerType.get(order.getType())))
                 .add(order);
+        updateFinancialInstrument(order.getFinancialInstrumentId());
     }
 
     // Helper method for testing: Checks if an order exists in the book

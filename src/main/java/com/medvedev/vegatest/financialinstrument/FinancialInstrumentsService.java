@@ -24,6 +24,10 @@ public class FinancialInstrumentsService {
         return financialInstruments.get(id);
     }
 
+    public void updatePrice(String id, BigDecimal price) {
+        financialInstruments.computeIfPresent(id, (k, v) -> v.setPrice(price));
+    }
+
     private void initFinancialInstruments(FinancialInstrumentsProperties financialInstrumentsProperties) {
         final var mapping = financialInstrumentsProperties.mapping();
 
