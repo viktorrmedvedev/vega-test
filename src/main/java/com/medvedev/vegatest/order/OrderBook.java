@@ -68,6 +68,8 @@ public class OrderBook {
         log.info("Created new order: {}", order);
         updateFinancialInstrument(instrumentId);
         processOrderBook(instrumentId);
+        financialInstrumentsService.findDependentCompositeInstruments(instrumentId)
+                .forEach(this::processOrderBook);
     }
 
     public void cancelOrder(String orderId) {
@@ -90,7 +92,7 @@ public class OrderBook {
                 return;
             }
 
-            if (buyOrder.getPrice() == null || buyOrder.getPrice().compareTo(sellOrder.getPrice()) >= 0) {
+            if (buyOrder.getPrice() == null || sellOrder.getPrice() == null || buyOrder.getPrice().compareTo(sellOrder.getPrice()) >= 0) {
                 executeTrade(buyOrder, sellOrder, buyOrder.getQuantity().min(sellOrder.getQuantity()));
             } else {
                 return;
@@ -138,7 +140,7 @@ public class OrderBook {
 
     private boolean compositeOrderConditionMatches(Order compositeOrder, List<Order> singleOppositeOrders) {
         if (compositeOrder.getPrice() == null) {
-            return true; // assume that user wants to buy for any price
+            return true; // assume that user wants to buy or sell for any price
         }
         if (compositeOrder.getQuantity().compareTo(BigDecimal.ZERO) == 0) {
             return false;

@@ -75,6 +75,30 @@ public class OrderBookTest {
     }
 
     @Test
+    void testExecuteTradeWithoutIndicatedBuyPrice() {
+        var buyOrder = anOrder("buyOrder2", Order.Type.BUY, null, new BigDecimal("10"));
+        var sellOrder = anOrder("sellOrder2", Order.Type.SELL, new BigDecimal("100.00"), new BigDecimal("5"));
+
+        orderBook.addOrderWithoutProcessing(buyOrder);
+        orderBook.addOrder(sellOrder);
+
+        assertEquals(0, sellOrder.getQuantity().compareTo(BigDecimal.ZERO), "Sell order quantity should be zero after trade");
+        assertEquals(0, buyOrder.getQuantity().compareTo(new BigDecimal("5")), "Buy order quantity should be reduced by the traded amount");
+    }
+
+    @Test
+    void testExecuteTradeWithoutIndicatedSellPrice() {
+        var buyOrder = anOrder("buyOrder2", Order.Type.BUY, new BigDecimal("100.00"), new BigDecimal("10"));
+        var sellOrder = anOrder("sellOrder2", Order.Type.SELL, null, new BigDecimal("5"));
+
+        orderBook.addOrderWithoutProcessing(buyOrder);
+        orderBook.addOrder(sellOrder);
+
+        assertEquals(0, sellOrder.getQuantity().compareTo(BigDecimal.ZERO), "Sell order quantity should be zero after trade");
+        assertEquals(0, buyOrder.getQuantity().compareTo(new BigDecimal("5")), "Buy order quantity should be reduced by the traded amount");
+    }
+
+    @Test
     void testCancelOrder() {
         var order = anOrder("order3", Order.Type.BUY, new BigDecimal("100.00"), new BigDecimal("10"));
         orderBook.addOrderWithoutProcessing(order);
@@ -107,6 +131,31 @@ public class OrderBookTest {
         orderBook.addOrderWithoutProcessing(sellOrderFI124);
 
         orderBook.addOrder(compositeBuyOrder);
+
+        assertFalse(orderBook.containsOrder(compositeBuyOrder), "Composite Buy order should be matched and removed");
+        assertFalse(orderBook.containsOrder(sellOrderFI123), "Sell order for FI123 should be matched and removed");
+        assertFalse(orderBook.containsOrder(sellOrderFI124), "Sell order for FI124 should be matched and removed");
+    }
+
+    @Test
+    void testCompositeOrderProcessingWhenChildInstrumentUpdates() {
+        CompositeFinancialInstrument compositeInstrument = aCompositeFinancialInstrument("compositeFI", List.of("FI123", "FI124"));
+        when(financialInstrumentsService.get("compositeFI")).thenReturn(compositeInstrument);
+        when(financialInstrumentsService.findDependentCompositeInstruments("FI124")).thenReturn(Set.of(compositeInstrument.getId()));
+
+        var compositeBuyOrder = anOrder("compositeBuyOrder", Order.Type.BUY, new BigDecimal("200.00"), new BigDecimal("10"));
+        compositeBuyOrder.setFinancialInstrumentId("compositeFI");
+
+        var sellOrderFI123 = anOrder("sellOrderFI123", Order.Type.SELL, new BigDecimal("100.00"), new BigDecimal("10"));
+        sellOrderFI123.setFinancialInstrumentId("FI123");
+
+        var sellOrderFI124 = anOrder("sellOrderFI124", Order.Type.SELL, new BigDecimal("100.00"), new BigDecimal("10"));
+        sellOrderFI124.setFinancialInstrumentId("FI124");
+
+        orderBook.addOrderWithoutProcessing(sellOrderFI123);
+        orderBook.addOrderWithoutProcessing(compositeBuyOrder);
+
+        orderBook.addOrder(sellOrderFI124);
 
         assertFalse(orderBook.containsOrder(compositeBuyOrder), "Composite Buy order should be matched and removed");
         assertFalse(orderBook.containsOrder(sellOrderFI123), "Sell order for FI123 should be matched and removed");
